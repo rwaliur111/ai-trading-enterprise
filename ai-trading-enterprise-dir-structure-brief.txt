@@ -1,0 +1,23 @@
+ai-trading-enterprise/
+├── src/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── market-data/
+│   │   │   │   └── [symbol]/
+│   │   │   │       └── route.ts              ← NEW FILE
+│   │   │   └── analyze/
+│   │   │       └── [symbol]/
+│   │   │           └── route.ts              ← NEW FILE (optional)
+│   │   ├── page.tsx                          ← UPDATE THIS FILE
+│   │   └── layout.tsx
+│   ├── infrastructure/
+│   │   └── external-apis/
+│   │       ├── alpha-vantage-service.ts      ← REPLACE THIS FILE
+│   │       ├── polygon-service.ts            ← NEW FILE
+│   │       └── multi-source-market-data.ts   ← UPDATE THIS FILE
+│   ├── application/
+│   │   └── services/
+│   │       └── ai-agent-orchestrator.ts      ← REPLACE THIS FILE
+│   └── components/
+│       └── TradingDashboard.tsx              ← UPDATE OR CREATE
+└── .env.local                                ← ADD YOUR REAL API KEYS HERE

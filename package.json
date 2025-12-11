@@ -1,0 +1,57 @@
+# Create clean package.json
+@'
+{
+  "name": "ai-trading-enterprise",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "14.0.4",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@types/react": "^18.2.45",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "14.0.4",
+    "typescript": "^5.3.3"
+  }
+}
+'@ | Out-File -FilePath "package.json" -Encoding UTF8
+
+# Create .gitignore
+@'
+node_modules/
+.next/
+out/
+.env*
+.vercel/
+*.log
+*.ps1
+*backup*
+'@ | Out-File -FilePath ".gitignore" -Encoding UTF8
+
+# Create README.md
+@'
+# AI Trading Enterprise
+
+Enterprise AI-driven trading platform with real-time market analysis.
+
+## Features
+- Real-time market data
+- AI-powered trading signals  
+- Portfolio management
+- Risk management
+- Vercel deployment ready
+
+## Getting Started
+1. Install dependencies: `npm install`
+2. Run dev server: `npm run dev`
+3. Build for production: `npm run build`
+'@ | Out-File -FilePath "README.md" -Encoding UTF8

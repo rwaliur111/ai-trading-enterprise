@@ -1,0 +1,2 @@
+﻿# Prevent BOM in JSON files (Windows-specific)
+*.json text eol=lf

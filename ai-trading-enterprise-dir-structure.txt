@@ -1,0 +1,62 @@
+ai-trading-enterprise/
+├── 📁 app/                                  
+│   ├── 📄 layout.tsx                    # Root layout
+│   ├── 📄 page.tsx                      # Home page (uses real components)
+│   └── 📄 globals.css                   # Global styles
+├── 📁 src/                              
+│   ├── 📁 domains/                      
+│   │   ├── 📁 trading/
+│   │   ├── 📁 market-data/
+│   │   │   └── 📁 services/
+│   │   │       └── 📄 market-data-service.ts   # NEW: Real market data
+│   │   ├── 📁 risk-management/
+│   │   └── 📁 notification/
+│   ├── 📁 infrastructure/               
+│   │   ├── 📁 database/
+│   │   │   └── 📄 supabase-client.ts    # UPDATED: Real Supabase client
+│   │   ├── 📁 cache/
+│   │   │   └── 📄 redis-client.ts       # NEW: Redis client
+│   │   └── 📁 external-apis/
+│   │       ├── 📄 alpaca-service.ts     # NEW: Real Alpaca trading
+│   │       ├── 📄 polygon-service.ts
+│   │       ├── 📄 alpha-vantage-service.ts
+│   │       └── 📄 news-services.ts
+│   ├── 📁 application/                  
+│   │   └── 📁 services/
+│   │       └── 📄 ai-agent-orchestrator.ts   # NEW: Real AI trading signals
+│   └── 📁 interfaces/                   
+│       ├── 📁 web/                      
+│       │   ├── 📁 components/           
+│       │   │   ├── 📁 trading/
+│       │   │   │   └── 📄 trading-dashboard.tsx   # UPDATED: Real data
+│       │   │   ├── 📁 monitoring/
+│       │   │   │   └── 📄 market-overview.tsx     # UPDATED: Real data
+│       │   │   └── 📁 ui/
+│       │   │       ├── 📄 card.tsx
+│       │   │       └── 📄 button.tsx
+│       │   ├── 📁 pages/                # LEGACY Pages Router (for API)
+│       │   │   └── 📁 api/
+│       │   │       ├── 📁 trading/
+│       │   │       │   ├── 📄 portfolio.ts        # NEW: Real portfolio API
+│       │   │       │   ├── 📄 orders.ts          # NEW: Real order execution
+│       │   │       │   ├── 📄 signals.ts         # UPDATED: Real signals
+│       │   │       │   └── 📄 metrics.ts         # NEW: Trading metrics
+│       │   │       └── 📁 market-data/
+│       │   │           └── 📄 quotes.ts          # NEW: Real market data API
+│       │   ├── 📁 hooks/                
+│       │   └── 📁 styles/               
+│       └── 📁 config/                   
+│           └── 📄 constants.ts          # NEW: Configuration constants
+├── 📁 public/                           
+├── 📁 scripts/                          
+│   ├── 📄 fix-bom.ps1                   # NEW: Fix package.json BOM
+│   └── 📄 setup-env.ps1                 # NEW: Windows setup
+├── 📄 package.json                      # FIXED: No BOM, updated dependencies
+├── 📄 next.config.js                    # UPDATED: For App Router
+├── 📄 tsconfig.json                     # Should reference app/ directory
+├── 📄 tailwind.config.js                
+├── 📄 vercel.json                       # Vercel deployment
+├── 📄 deploy.ps1                        # Windows deployment script
+├── 📄 deploy-real.ps1                   # Real API deployment
+├── 📄 git-push.ps1                      # Git push automation
+└── 📄 .env.example                      # All your real API keys
