@@ -1,4 +1,4 @@
-﻿export class RedisCache {
+export class RedisCache {
   async getBatch(keys: string[]): Promise<Record<string, any>> {
     return {};
   }

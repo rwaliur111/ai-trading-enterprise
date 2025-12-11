@@ -1,4 +1,4 @@
-﻿export interface MarketData {
+export interface MarketData {
   symbol: string;
   price: number;
   change: number;

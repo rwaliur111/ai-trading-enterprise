@@ -1,5 +1,3 @@
-# Create clean package.json
-@'
 {
   "name": "ai-trading-enterprise",
   "version": "1.0.0",
@@ -11,47 +9,23 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "next": "14.0.4",
-    "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "@alpacahq/alpaca-trade-api": "^3.0.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "axios": "^1.6.0",
+    "ioredis": "^5.3.2",
+    "next": "14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tailwindcss": "^3.3.0"
   },
   "devDependencies": {
-    "@types/node": "^20.10.5",
-    "@types/react": "^18.2.45",
-    "eslint": "^8.56.0",
-    "eslint-config-next": "14.0.4",
-    "typescript": "^5.3.3"
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "autoprefixer": "^10.0.0",
+    "postcss": "^8.0.0",
+    "typescript": "^5.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "14.0.0"
   }
 }
-'@ | Out-File -FilePath "package.json" -Encoding UTF8
-
-# Create .gitignore
-@'
-node_modules/
-.next/
-out/
-.env*
-.vercel/
-*.log
-*.ps1
-*backup*
-'@ | Out-File -FilePath ".gitignore" -Encoding UTF8
-
-# Create README.md
-@'
-# AI Trading Enterprise
-
-Enterprise AI-driven trading platform with real-time market analysis.
-
-## Features
-- Real-time market data
-- AI-powered trading signals  
-- Portfolio management
-- Risk management
-- Vercel deployment ready
-
-## Getting Started
-1. Install dependencies: `npm install`
-2. Run dev server: `npm run dev`
-3. Build for production: `npm run build`
-'@ | Out-File -FilePath "README.md" -Encoding UTF8

@@ -1,62 +1,60 @@
 ai-trading-enterprise/
-├── 📁 app/                                  
-│   ├── 📄 layout.tsx                    # Root layout
-│   ├── 📄 page.tsx                      # Home page (uses real components)
-│   └── 📄 globals.css                   # Global styles
-├── 📁 src/                              
-│   ├── 📁 domains/                      
-│   │   ├── 📁 trading/
-│   │   ├── 📁 market-data/
-│   │   │   └── 📁 services/
-│   │   │       └── 📄 market-data-service.ts   # NEW: Real market data
-│   │   ├── 📁 risk-management/
-│   │   └── 📁 notification/
-│   ├── 📁 infrastructure/               
-│   │   ├── 📁 database/
-│   │   │   └── 📄 supabase-client.ts    # UPDATED: Real Supabase client
-│   │   ├── 📁 cache/
-│   │   │   └── 📄 redis-client.ts       # NEW: Redis client
-│   │   └── 📁 external-apis/
-│   │       ├── 📄 alpaca-service.ts     # NEW: Real Alpaca trading
-│   │       ├── 📄 polygon-service.ts
-│   │       ├── 📄 alpha-vantage-service.ts
-│   │       └── 📄 news-services.ts
-│   ├── 📁 application/                  
-│   │   └── 📁 services/
-│   │       └── 📄 ai-agent-orchestrator.ts   # NEW: Real AI trading signals
-│   └── 📁 interfaces/                   
-│       ├── 📁 web/                      
-│       │   ├── 📁 components/           
-│       │   │   ├── 📁 trading/
-│       │   │   │   └── 📄 trading-dashboard.tsx   # UPDATED: Real data
-│       │   │   ├── 📁 monitoring/
-│       │   │   │   └── 📄 market-overview.tsx     # UPDATED: Real data
-│       │   │   └── 📁 ui/
-│       │   │       ├── 📄 card.tsx
-│       │   │       └── 📄 button.tsx
-│       │   ├── 📁 pages/                # LEGACY Pages Router (for API)
-│       │   │   └── 📁 api/
-│       │   │       ├── 📁 trading/
-│       │   │       │   ├── 📄 portfolio.ts        # NEW: Real portfolio API
-│       │   │       │   ├── 📄 orders.ts          # NEW: Real order execution
-│       │   │       │   ├── 📄 signals.ts         # UPDATED: Real signals
-│       │   │       │   └── 📄 metrics.ts         # NEW: Trading metrics
-│       │   │       └── 📁 market-data/
-│       │   │           └── 📄 quotes.ts          # NEW: Real market data API
-│       │   ├── 📁 hooks/                
-│       │   └── 📁 styles/               
-│       └── 📁 config/                   
-│           └── 📄 constants.ts          # NEW: Configuration constants
-├── 📁 public/                           
-├── 📁 scripts/                          
-│   ├── 📄 fix-bom.ps1                   # NEW: Fix package.json BOM
-│   └── 📄 setup-env.ps1                 # NEW: Windows setup
-├── 📄 package.json                      # FIXED: No BOM, updated dependencies
-├── 📄 next.config.js                    # UPDATED: For App Router
-├── 📄 tsconfig.json                     # Should reference app/ directory
-├── 📄 tailwind.config.js                
-├── 📄 vercel.json                       # Vercel deployment
-├── 📄 deploy.ps1                        # Windows deployment script
-├── 📄 deploy-real.ps1                   # Real API deployment
-├── 📄 git-push.ps1                      # Git push automation
-└── 📄 .env.example                      # All your real API keys
+├── app/                          # Next.js 14 App Router
+│   ├── api/                      # API Routes
+│   │   ├── trading/
+│   │   │   ├── portfolio/
+│   │   │   │   └── route.ts
+│   │   │   ├── orders/
+│   │   │   │   └── route.ts
+│   │   │   ├── signals/
+│   │   │   │   └── route.ts
+│   │   │   └── metrics/
+│   │   │       └── route.ts
+│   │   └── market-data/
+│   │       ├── quotes/
+│   │       │   └── route.ts
+│   │       └── scan/
+│   │           └── route.ts
+│   ├── layout.tsx
+│   ├── page.tsx
+│   └── globals.css
+├── src/
+│   ├── lib/                      # Shared utilities
+│   │   ├── supabase/            # Supabase client
+│   │   │   ├── client.ts
+│   │   │   ├── server.ts
+│   │   │   └── types.ts         # Generated types
+│   │   └── redis/               # Redis client
+│   ├── infrastructure/           # External services
+│   │   ├── database/
+│   │   │   └── supabase-client.ts    # UPDATED
+│   │   ├── cache/
+│   │   │   └── redis-client.ts
+│   │   └── external-apis/
+│   │       ├── alpaca-service.ts
+│   │       └── polygon-service.ts
+│   ├── domains/                  # Business logic
+│   │   ├── market-data/
+│   │   │   └── services/
+│   │   │       └── market-data-service.ts
+│   │   └── trading/
+│   │       └── services/
+│   │           └── trading-service.ts
+│   └── application/              # Use cases
+│       └── services/
+│           └── ai-agent-orchestrator.ts
+├── supabase/                     # Supabase config
+│   ├── migrations/
+│   │   ├── 001_initial_schema.sql
+│   │   └── 002_seed_data.sql
+│   ├── seed.sql                  # Initial data
+│   └── config.toml               # Supabase config
+├── public/
+├── scripts/                      # Deployment scripts
+│   ├── deploy.sh
+│   └── setup-db.sh
+├── .env.local                    # Local env vars
+├── .env.example                  # Example env vars
+├── next.config.js
+├── package.json
+└── vercel.json                   # Vercel config

@@ -1,4 +1,4 @@
-﻿export class MultiSourceMarketData {
+export class MultiSourceMarketData {
   async getMarketData(symbol: string): Promise<any> {
     // Mock implementation
     return { 

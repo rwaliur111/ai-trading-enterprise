@@ -1,4 +1,4 @@
-﻿import { HuggingFaceService } from '@/infrastructure/external-apis/huggingface-service';
+import { HuggingFaceService } from '@/infrastructure/external-apis/huggingface-service';
 import { OpenAIService } from '@/infrastructure/external-apis/openai-service';
 
 export class NewsSentimentAnalyzer {

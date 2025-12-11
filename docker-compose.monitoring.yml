@@ -1,8 +1,0 @@
-# docker-compose.monitoring.yml
-redis-cluster:
-  image: redis:7-alpine
-  command: redis-server --appendonly yes --cluster-enabled yes
-  ports:
-    - "6379:6379"
-  volumes:
-    - redis_data:/data

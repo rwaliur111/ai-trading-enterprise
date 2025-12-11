@@ -1,4 +1,4 @@
-﻿import { AlphaVantageService } from '@/infrastructure/external-apis/alpha-vantage-service';
+import { AlphaVantageService } from '@/infrastructure/external-apis/alpha-vantage-service';
 import { PolygonService } from '@/infrastructure/external-apis/polygon-service';
 import { FinnhubService } from '@/infrastructure/external-apis/finnhub-service';
 

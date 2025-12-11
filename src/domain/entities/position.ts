@@ -1,4 +1,4 @@
-﻿export interface Position {
+export interface Position {
   id?: string;
   symbol: string;
   quantity: number;

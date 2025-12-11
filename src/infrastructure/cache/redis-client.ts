@@ -1,26 +1,21 @@
-// Create src/infrastructure/cache/redis-client.ts
-@'
 import Redis from 'ioredis'
 
-class RedisClient {
+export class RedisClient {
   private static instance: Redis
   private static isConnected = false
 
+  private constructor() {}
+
   static getInstance(): Redis {
     if (!RedisClient.instance) {
-      const redisUrl = process.env.REDIS_URL
+      const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379'
       
-      if (!redisUrl) {
-        throw new Error('REDIS_URL environment variable is not set')
-      }
-
       RedisClient.instance = new Redis(redisUrl, {
         retryStrategy: (times) => {
           const delay = Math.min(times * 50, 2000)
           return delay
         },
-        maxRetriesPerRequest: 3,
-        enableReadyCheck: true,
+        maxRetriesPerRequest: 3
       })
 
       RedisClient.instance.on('connect', () => {
@@ -32,60 +27,62 @@ class RedisClient {
         console.error('Redis connection error:', error)
         RedisClient.isConnected = false
       })
-
-      RedisClient.instance.on('close', () => {
-        console.log('Redis connection closed')
-        RedisClient.isConnected = false
-      })
     }
 
     return RedisClient.instance
   }
 
   static async isReady(): Promise<boolean> {
-    try {
-      await RedisClient.getInstance().ping()
-      return true
-    } catch {
-      return false
+    if (!RedisClient.isConnected) {
+      try {
+        await RedisClient.getInstance().ping()
+        RedisClient.isConnected = true
+      } catch (error) {
+        RedisClient.isConnected = false
+      }
     }
+    return RedisClient.isConnected
   }
 
-  static async set(key: string, value: any, ttlSeconds?: number): Promise<void> {
-    const redis = RedisClient.getInstance()
-    const serialized = JSON.stringify(value)
+  static async get(key: string): Promise<string | null> {
+    if (!await this.isReady()) return null
     
-    if (ttlSeconds) {
-      await redis.setex(key, ttlSeconds, serialized)
-    } else {
-      await redis.set(key, serialized)
-    }
-  }
-
-  static async get<T>(key: string): Promise<T | null> {
     try {
-      const redis = RedisClient.getInstance()
-      const value = await redis.get(key)
-      
-      if (!value) return null
-      
-      return JSON.parse(value) as T
+      return await RedisClient.getInstance().get(key)
     } catch (error) {
       console.error('Redis get error:', error)
       return null
     }
   }
 
-  static async del(key: string): Promise<void> {
-    const redis = RedisClient.getInstance()
-    await redis.del(key)
+  static async set(key: string, value: string, ttl?: number): Promise<void> {
+    if (!await this.isReady()) return
+    
+    try {
+      if (ttl) {
+        await RedisClient.getInstance().setex(key, ttl, value)
+      } else {
+        await RedisClient.getInstance().set(key, value)
+      }
+    } catch (error) {
+      console.error('Redis set error:', error)
+    }
   }
 
-  static async flushAll(): Promise<void> {
-    const redis = RedisClient.getInstance()
-    await redis.flushall()
+  static async del(key: string): Promise<void> {
+    if (!await this.isReady()) return
+    
+    try {
+      await RedisClient.getInstance().del(key)
+    } catch (error) {
+      console.error('Redis delete error:', error)
+    }
+  }
+
+  static async disconnect(): Promise<void> {
+    if (RedisClient.instance) {
+      await RedisClient.instance.quit()
+      RedisClient.isConnected = false
+    }
   }
 }
-
-export default RedisClient
-'@ | Set-Content -Path ".\src\infrastructure\cache\redis-client.ts" -Encoding UTF8

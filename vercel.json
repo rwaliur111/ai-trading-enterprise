@@ -1,13 +1,16 @@
 {
+  "version": 2,
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
-  "framework": "nextjs",
   "outputDirectory": ".next",
-  "regions": ["iad1"],
+  "regions": ["sfo1"],
   "env": {
     "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key",
+    "ALPACA_API_KEY": "@alpaca_api_key",
+    "ALPACA_API_SECRET": "@alpaca_api_secret",
+    "ALPACA_PAPER": "true",
     "REDIS_URL": "@redis_url"
   }
 }

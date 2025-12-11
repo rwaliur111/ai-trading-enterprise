@@ -1,124 +1,111 @@
-// Update src/interfaces/web/components/monitoring/market-overview.tsx
-@'
-"use client"
+'use client'
 
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
-
-interface MarketQuote {
-  symbol: string
-  price: number
-  change: number
-  changePercent: number
-  volume: number
-  timestamp: string
-}
 
 export default function MarketOverview() {
-  const [quotes, setQuotes] = useState<MarketQuote[]>([])
-  const [aiMetrics, setAiMetrics] = useState({
-    confidence: 0,
-    signalsToday: 0,
-    winRate: 0
-  })
+  const [marketData, setMarketData] = useState<any[]>([])
+  const [sentiment, setSentiment] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    loadMarketData()
-    const interval = setInterval(loadMarketData, 30000) // Refresh every 30 seconds
-    return () => clearInterval(interval)
+    fetchMarketData()
+    fetchSentiment()
   }, [])
 
-  const loadMarketData = async () => {
-    setIsLoading(true)
+  const fetchMarketData = async () => {
     try {
-      // Fetch market quotes
-      const quotesRes = await fetch('/api/market-data/quotes')
-      const quotesData = await quotesRes.json()
-      setQuotes(quotesData.data)
-
-      // Fetch AI metrics
-      const metricsRes = await fetch('/api/trading/metrics')
-      const metricsData = await metricsRes.json()
-      setAiMetrics(metricsData.data)
+      const response = await fetch('/api/market-data/quotes?symbols=SPY,QQQ,DIA')
+      const data = await response.json()
+      setMarketData(data.quotes || [])
     } catch (error) {
-      console.error('Error loading market data:', error)
+      console.error('Error fetching market data:', error)
     } finally {
       setIsLoading(false)
     }
   }
 
-  if (isLoading) {
-    return (
-      <Card className="glass-effect">
-        <CardHeader>
-          <CardTitle>Market Overview</CardTitle>
-          <CardDescription>Loading market data...</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-12 bg-gray-800/50 animate-pulse rounded-lg"></div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    )
+  const fetchSentiment = async () => {
+    try {
+      const response = await fetch('/api/trading/signals?sentiment=true')
+      const data = await response.json()
+      setSentiment(data.market_sentiment)
+    } catch (error) {
+      console.error('Error fetching sentiment:', error)
+    }
   }
 
   return (
-    <Card className="glass-effect">
-      <CardHeader>
-        <CardTitle>Market Overview</CardTitle>
-        <CardDescription>Real-time market indicators</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {quotes.slice(0, 5).map((quote) => (
-            <div key={quote.symbol} className="flex justify-between items-center p-3 bg-gray-900/50 rounded-lg hover:bg-gray-800/50 transition-colors">
-              <div>
-                <p className="font-medium">{quote.symbol}</p>
-                <p className="text-sm text-gray-400">${quote.price.toFixed(2)}</p>
-              </div>
-              <div className={`text-right ${quote.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                <p className="font-medium">
-                  {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)}
-                </p>
-                <p className="text-sm">
-                  ({quote.change >= 0 ? '+' : ''}{quote.changePercent.toFixed(2)}%)
-                </p>
+    <div className="bg-white rounded-lg shadow">
+      <div className="p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Market Overview</h3>
+        
+        {isLoading ? (
+          <div className="text-center py-8 text-gray-500">Loading...</div>
+        ) : (
+          <div className="space-y-6">
+            <div>
+              <h4 className="font-medium mb-3">Major Indices</h4>
+              <div className="space-y-3">
+                {marketData.map((item, index) => (
+                  <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                    <div>
+                      <div className="font-medium">{item.symbol}</div>
+                      <div className="text-sm text-gray-500">Index</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-medium">${item.price?.toFixed(2)}</div>
+                      <div className={`text-sm ${item.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {item.change >= 0 ? '+' : ''}{item.change?.toFixed(2)} ({item.changePercent?.toFixed(2)}%)
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-        
-        <div className="mt-6 pt-4 border-t border-gray-800">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-400">AI Confidence:</span>
-            <span className="text-green-400 font-medium">
-              {(aiMetrics.confidence * 100).toFixed(1)}%
-            </span>
-          </div>
-          <div className="flex justify-between text-sm mt-2">
-            <span className="text-gray-400">Signals Today:</span>
-            <span className="font-medium">{aiMetrics.signalsToday}</span>
-          </div>
-          <div className="flex justify-between text-sm mt-2">
-            <span className="text-gray-400">Win Rate:</span>
-            <span className="text-green-400 font-medium">
-              {(aiMetrics.winRate * 100).toFixed(1)}%
-            </span>
-          </div>
-        </div>
 
-        <button
-          onClick={loadMarketData}
-          className="mt-4 w-full py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
-        >
-          Refresh Data
-        </button>
-      </CardContent>
-    </Card>
+            {sentiment && (
+              <div>
+                <h4 className="font-medium mb-3">Market Sentiment</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm">Bullish</span>
+                    <span className="font-medium">{Math.round(sentiment.bullish * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-green-600 h-2 rounded-full" 
+                      style={{ width: `${sentiment.bullish * 100}%` }}
+                    ></div>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-sm">Bearish</span>
+                    <span className="font-medium">{Math.round(sentiment.bearish * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-red-600 h-2 rounded-full" 
+                      style={{ width: `${sentiment.bearish * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="p-4 bg-blue-50 rounded">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-blue-900">Market Open</p>
+                  <p className="text-sm text-blue-700">NASDAQ: 9:30 AM - 4:00 PM ET</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
-'@ | Set-Content -Path ".\src\interfaces\web\components\monitoring\market-overview.tsx" -Encoding UTF8

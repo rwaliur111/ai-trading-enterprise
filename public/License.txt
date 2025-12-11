@@ -1,0 +1,14 @@
+
+**public/** (empty directory, just create it)
+
+## **Installation Instructions**
+
+1. Create all the directories as shown in your structure
+2. Create each file in its respective directory with the content provided
+3. Run the setup script first: `powershell -ExecutionPolicy Bypass -File setup-env.ps1`
+4. Update the `.env` file with your real API keys
+5. Install dependencies: `npm install`
+6. Start the development server: `npm run dev`
+7. Open http://localhost:3000
+
+The project is now ready with real trading capabilities using Alpaca, real market data, AI trading signals, and all the infrastructure needed for a production trading platform.

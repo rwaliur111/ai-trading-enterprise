@@ -1,25 +1,20 @@
 # AI Trading Enterprise
 
-Enterprise-grade AI-powered automated trading platform with real-time market analysis, risk management, and portfolio optimization.
+Enterprise-grade AI-powered trading platform with real market data integration.
 
 ## Features
 
-- 🤖 Multi-agent AI trading system
-- 📊 Real-time market data from multiple sources
-- 🛡️ Advanced risk management
-- 📈 Portfolio tracking and analytics
-- 🔔 Real-time notifications via Discord
-- 🚀 Scalable microservices architecture
-- 📱 Modern React/Next.js dashboard
-- 🗄️ Supabase PostgreSQL database
-- 🔄 Redis caching and pub/sub
-- 📉 Technical analysis indicators
-- 📰 News and sentiment analysis
+- Real-time market data from Alpaca and Polygon
+- AI-powered trading signal generation
+- Portfolio management and order execution
+- Risk management and monitoring
+- Redis caching for performance
+- Supabase database integration
 
-## Quick Start
+## Setup
 
-1. **Clone and install dependencies**
-   ```bash
-   git clone <your-repo-url>
-   cd ai-trading-enterprise
-   npm install
+1. Clone the repository
+2. Copy `.env.example` to `.env` and add your API keys
+3. Run setup script:
+   ```powershell
+   .\setup-env.ps1

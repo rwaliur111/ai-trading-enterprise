@@ -1,4 +1,4 @@
-﻿export interface CacheOptions {
+export interface CacheOptions {
   ttl?: number;
 }
 

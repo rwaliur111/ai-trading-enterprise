@@ -1,4 +1,4 @@
-﻿export interface TradeSignal {
+export interface TradeSignal {
   id?: string;
   symbol: string;
   action: 'BUY' | 'SELL' | 'HOLD';

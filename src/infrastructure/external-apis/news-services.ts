@@ -1,74 +1,69 @@
 import axios from 'axios';
 
+export interface NewsArticle {
+  title: string;
+  description: string;
+  url: string;
+  source: string;
+  publishedAt: string;
+  symbol?: string;
+}
+
 export class NewsService {
-  private newsApiKey: string;
-  private benzingaApiKey: string;
+  private apiKey: string;
+  private baseUrl = 'https://newsapi.org/v2';
 
   constructor() {
-    this.newsApiKey = process.env.NEWSAPI_KEY!;
-    this.benzingaApiKey = process.env.BENZINGA_API_KEY!;
+    this.apiKey = process.env.NEWS_API_KEY!;
   }
 
-  async getNews(symbol: string, fromDate?: string): Promise<any[]> {
+  async getMarketNews(symbol?: string): Promise<NewsArticle[]> {
     try {
-      // Using NewsAPI
-      const today = new Date().toISOString().split('T')[0];
-      const from = fromDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const params: any = {
+        apiKey: this.apiKey,
+        q: symbol || 'stock market',
+        language: 'en',
+        pageSize: 20,
+        sortBy: 'publishedAt'
+      };
+
+      const response = await axios.get(`${this.baseUrl}/everything`, { params });
       
-      const response = await axios.get(
-        `https://newsapi.org/v2/everything?q=${symbol}+stock&from=${from}&to=${today}&sortBy=publishedAt&apiKey=${this.newsApiKey}`
-      );
-      
-      return response.data.articles?.slice(0, 10) || [];
+      return response.data.articles.map((article: any) => ({
+        title: article.title,
+        description: article.description,
+        url: article.url,
+        source: article.source.name,
+        publishedAt: article.publishedAt,
+        symbol: symbol
+      }));
     } catch (error) {
-      console.error('News API error:', error);
+      console.error('Error fetching news:', error);
       return [];
     }
   }
 
-  async getMarketNews(): Promise<any[]> {
+  async getTopHeadlines(): Promise<NewsArticle[]> {
     try {
-      const response = await axios.get(
-        `https://newsapi.org/v2/top-headlines?category=business&country=us&apiKey=${this.newsApiKey}`
-      );
-      return response.data.articles?.slice(0, 5) || [];
+      const response = await axios.get(`${this.baseUrl}/top-headlines`, {
+        params: {
+          apiKey: this.apiKey,
+          category: 'business',
+          country: 'us',
+          pageSize: 10
+        }
+      });
+      
+      return response.data.articles.map((article: any) => ({
+        title: article.title,
+        description: article.description,
+        url: article.url,
+        source: article.source.name,
+        publishedAt: article.publishedAt
+      }));
     } catch (error) {
-      console.error('Market news error:', error);
+      console.error('Error fetching top headlines:', error);
       return [];
     }
-  }
-
-  async getSentiment(symbol: string): Promise<{score: number, sentiment: string}> {
-    try {
-      // Using HuggingFace for sentiment analysis
-      const news = await this.getNews(symbol);
-      const headlines = news.map((article: any) => article.title).join('. ');
-      
-      if (headlines.length > 0) {
-        const response = await axios.post(
-          'https://api-inference.huggingface.co/models/finiteautomata/bertweet-base-sentiment-analysis',
-          { inputs: headlines },
-          {
-            headers: {
-              'Authorization': `Bearer ${process.env.HUGGINGFACE_API_KEY}`
-            }
-          }
-        );
-        
-        const scores = response.data[0];
-        const positive = scores.find((s: any) => s.label === 'POS')?.score || 0;
-        const negative = scores.find((s: any) => s.label === 'NEG')?.score || 0;
-        
-        const score = positive - negative;
-        return {
-          score,
-          sentiment: score > 0.2 ? 'positive' : score < -0.2 ? 'negative' : 'neutral'
-        };
-      }
-    } catch (error) {
-      console.error('Sentiment analysis error:', error);
-    }
-    
-    return { score: 0, sentiment: 'neutral' };
   }
 }
