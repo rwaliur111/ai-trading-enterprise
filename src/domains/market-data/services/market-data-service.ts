@@ -1,31 +1,21 @@
-import { RedisClient } from '@/infrastructure/cache/redis-client';
-import { AlpacaService } from '@/infrastructure/external-apis/alpaca-service';
-import { PolygonService } from '@/infrastructure/external-apis/polygon-service';
-import { AlphaVantageService } from '@/infrastructure/external-apis/alpha-vantage-service';
-import { NewsService } from '@/infrastructure/external-apis/news-services';
-import { TRADING_CONFIG, CACHE_CONFIG, SYMBOLS } from '@/config/constants';
+import Redis from 'ioredis';
+import { PolygonService } from '../../../infrastructure/external-apis/polygon-service';
+import { AlphaVantageService } from '../../../infrastructure/external-apis/alpha-vantage-service';
+import { NewsAPIService } from '../../../infrastructure/external-apis/newsapi-service';
 
-export interface MarketData {
+export interface Quote {
   symbol: string;
   price: number;
   change: number;
   changePercent: number;
   volume: number;
   timestamp: Date;
-  high: number;
-  low: number;
-  open: number;
-  previousClose: number;
-  vwap?: number;
-  bid: number;
-  ask: number;
-  bidSize: number;
-  askSize: number;
-  marketCap?: number;
-  peRatio?: number;
-  dividendYield?: number;
-  sector?: string;
-  industry?: string;
+  bid?: number;
+  ask?: number;
+  high?: number;
+  low?: number;
+  open?: number;
+  previousClose?: number;
 }
 
 export interface HistoricalData {
@@ -39,599 +29,505 @@ export interface HistoricalData {
 }
 
 export interface MarketNews {
+  id: string;
   title: string;
   description: string;
   url: string;
   source: string;
   publishedAt: Date;
   symbols: string[];
-  sentiment: 'positive' | 'negative' | 'neutral';
-  sentimentScore: number;
+  sentiment?: 'positive' | 'negative' | 'neutral';
+  sentimentScore?: number;
 }
 
 export interface MarketOverview {
-  sp500: MarketData;
-  nasdaq: MarketData;
-  dowJones: MarketData;
   fearGreedIndex: number;
-  marketStatus: {
-    isOpen: boolean;
-    nextOpen?: Date;
-    nextClose?: Date;
-  };
-  advancers: number;
-  decliners: number;
-  volume: number;
+  marketStatus: 'open' | 'closed' | 'pre' | 'post';
+  sp500Change: number;
+  nasdaqChange: number;
+  dowJonesChange: number;
+  vix: number;
+  putCallRatio: number;
 }
 
 export class MarketDataService {
-  private redis: RedisClient;
-  private alpaca: AlpacaService;
   private polygon: PolygonService;
   private alphaVantage: AlphaVantageService;
-  private newsService: NewsService;
-  
-  // Cache for frequently accessed data
-  private symbolCache = new Map<string, MarketData>();
-  private lastUpdate = new Map<string, Date>();
+  private newsAPI: NewsAPIService;
+  private redis: Redis;
 
   constructor() {
-    this.redis = RedisClient.getInstance();
-    this.alpaca = new AlpacaService();
     this.polygon = new PolygonService();
     this.alphaVantage = new AlphaVantageService();
-    this.newsService = new NewsService();
-    
-    // Initialize cache cleanup
-    this.startCacheCleanup();
+    this.newsAPI = new NewsAPIService();
+    this.redis = new Redis(process.env.REDIS_URL!);
   }
 
-  // Real-time quote for a single symbol
-  async getRealTimeQuote(symbol: string): Promise<MarketData> {
-    const cacheKey = `${CACHE_CONFIG.PREFIXES.QUOTE}${symbol}`;
+  // Get real-time quote for a symbol
+  async getRealTimeQuote(symbol: string): Promise<Quote> {
+    const cacheKey = `quote:${symbol}:realtime`;
     
-    // Check memory cache first (fastest)
-    const cached = this.symbolCache.get(symbol);
-    const lastUpdate = this.lastUpdate.get(symbol);
-    
-    if (cached && lastUpdate && 
-        (Date.now() - lastUpdate.getTime()) < CACHE_CONFIG.TTL.QUOTE * 1000) {
-      return cached;
-    }
-
-    // Check Redis cache
-    const redisCached = await this.redis.get(cacheKey);
-    if (redisCached) {
-      const data = JSON.parse(redisCached);
-      this.symbolCache.set(symbol, data);
-      this.lastUpdate.set(symbol, new Date());
-      return data;
-    }
-
-    try {
-      // Fetch from Alpaca (primary source)
-      const quote = await this.alpaca.getQuote(symbol);
-      
-      // Enrich with additional data from Polygon
-      const [tickerDetails, aggregates] = await Promise.all([
-        this.polygon.getTickerDetails(symbol).catch(() => null),
-        this.polygon.getAggregates(symbol, 'minute', 1).catch(() => null)
-      ]);
-
-      const marketData: MarketData = {
-        symbol: quote.symbol,
-        price: quote.lastPrice,
-        change: quote.change,
-        changePercent: quote.changePercent,
-        volume: quote.volume,
-        timestamp: new Date(quote.timestamp),
-        high: aggregates?.results?.[0]?.h || quote.lastPrice * 1.01,
-        low: aggregates?.results?.[0]?.l || quote.lastPrice * 0.99,
-        open: aggregates?.results?.[0]?.o || quote.lastPrice * 0.995,
-        previousClose: quote.lastPrice - quote.change,
-        bid: quote.bidPrice,
-        ask: quote.askPrice,
-        bidSize: quote.bidSize,
-        askSize: quote.askSize,
-        marketCap: tickerDetails?.market_cap,
-        peRatio: tickerDetails?.pe_ratio,
-        dividendYield: tickerDetails?.dividend_yield,
-        sector: tickerDetails?.sector,
-        industry: tickerDetails?.industry
-      };
-
-      // Update caches
-      this.symbolCache.set(symbol, marketData);
-      this.lastUpdate.set(symbol, new Date());
-      await this.redis.set(cacheKey, JSON.stringify(marketData), CACHE_CONFIG.TTL.QUOTE);
-
-      return marketData;
-    } catch (error) {
-      console.error(`Error fetching real-time quote for ${symbol}:`, error);
-      
-      // Fallback to Alpha Vantage
-      try {
-        const timeSeries = await this.alphaVantage.getTimeSeriesDaily(symbol);
-        const latest = Object.values(timeSeries['Time Series (Daily)'])[0];
-        
-        const fallbackData: MarketData = {
-          symbol,
-          price: parseFloat(latest['4. close']),
-          change: parseFloat(latest['4. close']) - parseFloat(latest['1. open']),
-          changePercent: ((parseFloat(latest['4. close']) - parseFloat(latest['1. open'])) / parseFloat(latest['1. open'])) * 100,
-          volume: parseInt(latest['5. volume']),
-          timestamp: new Date(),
-          high: parseFloat(latest['2. high']),
-          low: parseFloat(latest['3. low']),
-          open: parseFloat(latest['1. open']),
-          previousClose: parseFloat(latest['1. open']),
-          bid: parseFloat(latest['4. close']) * 0.999,
-          ask: parseFloat(latest['4. close']) * 1.001,
-          bidSize: 100,
-          askSize: 100
-        };
-
-        return fallbackData;
-      } catch (fallbackError) {
-        console.error(`Fallback also failed for ${symbol}:`, fallbackError);
-        throw new Error(`Failed to fetch market data for ${symbol}`);
-      }
-    }
-  }
-
-  // Batch quotes for multiple symbols (optimized for performance)
-  async getBatchQuotes(symbols: string[]): Promise<MarketData[]> {
-    // Split into cached and uncached symbols
-    const cachedResults: MarketData[] = [];
-    const uncachedSymbols: string[] = [];
-    const currentTime = Date.now();
-
-    symbols.forEach(symbol => {
-      const cached = this.symbolCache.get(symbol);
-      const lastUpdate = this.lastUpdate.get(symbol);
-      
-      if (cached && lastUpdate && 
-          (currentTime - lastUpdate.getTime()) < CACHE_CONFIG.TTL.QUOTE * 1000) {
-        cachedResults.push(cached);
-      } else {
-        uncachedSymbols.push(symbol);
-      }
-    });
-
-    // Fetch uncached symbols in parallel with batch size limit
-    const batchSize = 20;
-    const batches = [];
-    
-    for (let i = 0; i < uncachedSymbols.length; i += batchSize) {
-      const batch = uncachedSymbols.slice(i, i + batchSize);
-      batches.push(batch);
-    }
-
-    const fetchPromises = batches.map(async (batch) => {
-      return Promise.all(batch.map(symbol => this.getRealTimeQuote(symbol)));
-    });
-
-    const batchResults = await Promise.all(fetchPromises);
-    const uncachedResults = batchResults.flat();
-
-    return [...cachedResults, ...uncachedResults].sort((a, b) => 
-      symbols.indexOf(a.symbol) - symbols.indexOf(b.symbol)
-    );
-  }
-
-  // Get market overview (SPY, QQQ, DIA, etc.)
-  async getMarketOverview(): Promise<MarketOverview> {
-    const cacheKey = 'market:overview';
-    
+    // Check cache first (5-second cache for real-time data)
     const cached = await this.redis.get(cacheKey);
     if (cached) {
       return JSON.parse(cached);
     }
-
+    
     try {
-      const [sp500, nasdaq, dowJones, marketStatus] = await Promise.all([
-        this.getRealTimeQuote('SPY'),
-        this.getRealTimeQuote('QQQ'),
-        this.getRealTimeQuote('DIA'),
-        this.getMarketStatus()
-      ]);
-
-      // Get advance/decline data
-      const allSymbols = [...SYMBOLS.WATCHLIST, ...SYMBOLS.INDICES];
-      const quotes = await this.getBatchQuotes(allSymbols.slice(0, 100));
+      // Try Polygon first (more reliable for real-time)
+      const polygonQuote = await this.polygon.getQuote(symbol);
       
-      const advancers = quotes.filter(q => q.changePercent > 0).length;
-      const decliners = quotes.filter(q => q.changePercent < 0).length;
-      const totalVolume = quotes.reduce((sum, q) => sum + q.volume, 0);
-
-      // Calculate Fear & Greed Index (simplified)
-      const fearGreedIndex = this.calculateFearGreedIndex(quotes);
-
-      const overview: MarketOverview = {
-        sp500,
-        nasdaq,
-        dowJones,
-        fearGreedIndex,
-        marketStatus,
-        advancers,
-        decliners,
-        volume: totalVolume
+      const quote: Quote = {
+        symbol: polygonQuote.symbol,
+        price: polygonQuote.last.price,
+        change: polygonQuote.last.price - polygonQuote.prevClose,
+        changePercent: ((polygonQuote.last.price - polygonQuote.prevClose) / polygonQuote.prevClose) * 100,
+        volume: polygonQuote.last.size,
+        timestamp: new Date(polygonQuote.last.timestamp),
+        bid: polygonQuote.last.bidPrice,
+        ask: polygonQuote.last.askPrice,
+        high: polygonQuote.day.h,
+        low: polygonQuote.day.l,
+        open: polygonQuote.day.o,
+        previousClose: polygonQuote.prevClose
       };
-
-      await this.redis.set(cacheKey, JSON.stringify(overview), 60); // Cache for 1 minute
-      return overview;
+      
+      // Cache for 5 seconds
+      await this.redis.setex(cacheKey, 5, JSON.stringify(quote));
+      
+      return quote;
     } catch (error) {
-      console.error('Error fetching market overview:', error);
+      console.warn(`Polygon failed for ${symbol}, falling back to Alpha Vantage`);
+      
+      // Fallback to Alpha Vantage
+      const avQuote = await this.alphaVantage.getQuote(symbol);
+      
+      const quote: Quote = {
+        symbol: symbol,
+        price: parseFloat(avQuote['05. price']),
+        change: parseFloat(avQuote['09. change']),
+        changePercent: parseFloat(avQuote['10. change percent'].replace('%', '')),
+        volume: parseInt(avQuote['06. volume']),
+        timestamp: new Date(avQuote['07. latest trading day']),
+        high: parseFloat(avQuote['03. high']),
+        low: parseFloat(avQuote['04. low']),
+        open: parseFloat(avQuote['02. open']),
+        previousClose: parseFloat(avQuote['08. previous close'])
+      };
+      
+      // Cache for 30 seconds (Alpha Vantage has lower rate limits)
+      await this.redis.setex(cacheKey, 30, JSON.stringify(quote));
+      
+      return quote;
+    }
+  }
+
+  // Get batch quotes
+  async getBatchQuotes(symbols: string[]): Promise<Quote[]> {
+    const cacheKey = `quotes:batch:${symbols.sort().join(',')}`;
+    
+    // Check cache first
+    const cached = await this.redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+    
+    // Process in batches to respect rate limits
+    const batchSize = 50;
+    const batches = [];
+    
+    for (let i = 0; i < symbols.length; i += batchSize) {
+      batches.push(symbols.slice(i, i + batchSize));
+    }
+    
+    const allQuotes: Quote[] = [];
+    
+    for (const batch of batches) {
+      try {
+        const polygonQuotes = await this.polygon.getBatchQuotes(batch);
+        allQuotes.push(...polygonQuotes);
+      } catch (error) {
+        console.warn('Polygon batch failed, falling back to individual requests');
+        
+        // Fallback to individual requests
+        const batchQuotes = await Promise.all(
+          batch.map(symbol => 
+            this.getRealTimeQuote(symbol).catch(err => null)
+          )
+        );
+        
+        allQuotes.push(...batchQuotes.filter(q => q !== null) as Quote[]);
+      }
+      
+      // Delay between batches
+      if (batches.indexOf(batch) < batches.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    
+    // Cache for 10 seconds
+    await this.redis.setex(cacheKey, 10, JSON.stringify(allQuotes));
+    
+    return allQuotes;
+  }
+
+  // Get historical data
+  async getHistoricalData(
+    symbol: string, 
+    interval: 'minute' | 'hour' | 'day' = 'day', 
+    days: number = 100
+  ): Promise<HistoricalData[]> {
+    const cacheKey = `historical:${symbol}:${interval}:${days}`;
+    
+    // Check cache first (cache historical data for longer)
+    const cached = await this.redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+    
+    try {
+      let data: HistoricalData[];
+      
+      if (interval === 'minute') {
+        data = await this.polygon.getAggregates(symbol, 'minute', days);
+      } else if (interval === 'hour') {
+        data = await this.polygon.getAggregates(symbol, 'hour', days);
+      } else {
+        data = await this.alphaVantage.getDailyData(symbol, days);
+      }
+      
+      // Cache for 1 hour for daily data, 5 minutes for intraday
+      const ttl = interval === 'day' ? 3600 : 300;
+      await this.redis.setex(cacheKey, ttl, JSON.stringify(data));
+      
+      return data;
+    } catch (error) {
+      console.error(`Error getting historical data for ${symbol}:`, error);
       throw error;
     }
   }
 
-  // Get historical data with multiple timeframes
-  async getHistoricalData(
-    symbol: string, 
-    timeframe: 'minute' | 'hour' | 'day' | 'week' | 'month' = 'day',
-    limit: number = 100
-  ): Promise<HistoricalData[]> {
-    const cacheKey = `${CACHE_CONFIG.PREFIXES.HISTORICAL}${symbol}:${timeframe}:${limit}`;
-    
-    const cached = await this.redis.get(cacheKey);
-    if (cached) {
-      return JSON.parse(cached);
-    }
-
-    try {
-      let aggregates;
-      const now = new Date();
-      const from = new Date();
-
-      switch (timeframe) {
-        case 'minute':
-          from.setMinutes(now.getMinutes() - limit);
-          aggregates = await this.polygon.getAggregates(
-            symbol, 
-            'minute',
-            from.toISOString().split('T')[0],
-            now.toISOString().split('T')[0]
-          );
-          break;
-        case 'hour':
-          from.setHours(now.getHours() - limit);
-          aggregates = await this.polygon.getAggregates(
-            symbol,
-            'hour',
-            from.toISOString().split('T')[0],
-            now.toISOString().split('T')[0]
-          );
-          break;
-        case 'day':
-          from.setDate(now.getDate() - limit);
-          aggregates = await this.polygon.getAggregates(
-            symbol,
-            'day',
-            from.toISOString().split('T')[0],
-            now.toISOString().split('T')[0]
-          );
-          break;
-        default:
-          from.setDate(now.getDate() - limit);
-          aggregates = await this.polygon.getAggregates(
-            symbol,
-            'day',
-            from.toISOString().split('T')[0],
-            now.toISOString().split('T')[0]
-          );
-      }
-
-      if (aggregates?.results) {
-        const historicalData: HistoricalData[] = aggregates.results.map((result: any) => ({
-          timestamp: new Date(result.t),
-          open: result.o,
-          high: result.h,
-          low: result.l,
-          close: result.c,
-          volume: result.v,
-          vwap: result.vw
-        })).reverse(); // Reverse to chronological order
-
-        await this.redis.set(cacheKey, JSON.stringify(historicalData), CACHE_CONFIG.TTL.HISTORICAL);
-        return historicalData;
-      }
-    } catch (error) {
-      console.error(`Error fetching historical data for ${symbol}:`, error);
-    }
-
-    // Generate mock historical data as fallback
-    return this.generateMockHistoricalData(symbol, timeframe, limit);
-  }
-
-  // Get market status
-  async getMarketStatus(): Promise<{
-    isOpen: boolean;
-    nextOpen?: Date;
-    nextClose?: Date;
-    currentTime: Date;
-  }> {
-    try {
-      return await this.alpaca.getMarketStatus();
-    } catch (error) {
-      console.error('Error getting market status:', error);
-      
-      const now = new Date();
-      const isOpen = now.getHours() >= 9 && now.getHours() < 16 && now.getDay() >= 1 && now.getDay() <= 5;
-      
-      const nextOpen = new Date();
-      nextOpen.setDate(nextOpen.getDate() + 1);
-      nextOpen.setHours(9, 30, 0, 0);
-      
-      const nextClose = new Date();
-      if (now.getHours() < 16) {
-        nextClose.setHours(16, 0, 0, 0);
-      } else {
-        nextClose.setDate(nextClose.getDate() + 1);
-        nextClose.setHours(16, 0, 0, 0);
-      }
-      
-      return {
-        isOpen,
-        nextOpen,
-        nextClose,
-        currentTime: now
-      };
-    }
-  }
-
-  // Get market news with sentiment analysis
+  // Get market news
   async getMarketNews(limit: number = 20): Promise<MarketNews[]> {
-    const cacheKey = `${CACHE_CONFIG.PREFIXES.NEWS}general:${limit}`;
+    const cacheKey = `news:market:${limit}`;
     
+    // Check cache first (5 minute cache for news)
     const cached = await this.redis.get(cacheKey);
     if (cached) {
       return JSON.parse(cached);
     }
-
+    
     try {
-      const news = await this.newsService.getMarketNews(undefined, limit * 2); // Get extra for filtering
+      const news = await this.newsAPI.getMarketNews(limit);
       
-      const processedNews = await Promise.all(
-        news.map(async (article) => {
-          const symbols = this.extractSymbolsFromText(article.title + ' ' + article.description);
-          const sentiment = await this.analyzeSentiment(article);
-          
-          return {
-            ...article,
-            publishedAt: new Date(article.publishedAt),
-            symbols,
-            sentiment: sentiment.sentiment,
-            sentimentScore: sentiment.score
-          };
-        })
+      // Enhance with sentiment analysis
+      const newsWithSentiment = await Promise.all(
+        news.map(async (article) => ({
+          ...article,
+          ...await this.analyzeNewsSentiment(article)
+        }))
       );
-
-      // Sort by relevance and sentiment
-      const sortedNews = processedNews
-        .filter(article => article.symbols.length > 0 || article.sentimentScore > 0.3)
-        .sort((a, b) => b.sentimentScore - a.sentimentScore)
-        .slice(0, limit);
-
-      await this.redis.set(cacheKey, JSON.stringify(sortedNews), CACHE_CONFIG.TTL.NEWS);
-      return sortedNews;
+      
+      // Cache for 5 minutes
+      await this.redis.setex(cacheKey, 300, JSON.stringify(newsWithSentiment));
+      
+      return newsWithSentiment;
     } catch (error) {
       console.error('Error fetching market news:', error);
       return [];
     }
   }
 
-  // Scan for potential trading opportunities
-  async scanForOpportunities(
-    criteria: {
-      minVolume?: number;
-      minPrice?: number;
-      maxPrice?: number;
-      sectors?: string[];
-      minChangePercent?: number;
-      maxChangePercent?: number;
-    } = {}
-  ): Promise<MarketData[]> {
-    // Get all symbols from watchlist
-    const symbols = SYMBOLS.WATCHLIST;
-    const quotes = await this.getBatchQuotes(symbols);
-
-    // Apply filters
-    let filtered = quotes;
-
-    if (criteria.minVolume) {
-      filtered = filtered.filter(q => q.volume >= criteria.minVolume!);
+  // Get market overview
+  async getMarketOverview(): Promise<MarketOverview> {
+    const cacheKey = 'market:overview';
+    
+    // Check cache first (1 minute cache)
+    const cached = await this.redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
     }
-
-    if (criteria.minPrice) {
-      filtered = filtered.filter(q => q.price >= criteria.minPrice!);
-    }
-
-    if (criteria.maxPrice) {
-      filtered = filtered.filter(q => q.price <= criteria.maxPrice!);
-    }
-
-    if (criteria.minChangePercent) {
-      filtered = filtered.filter(q => q.changePercent >= criteria.minChangePercent!);
-    }
-
-    if (criteria.maxChangePercent) {
-      filtered = filtered.filter(q => q.changePercent <= criteria.maxChangePercent!);
-    }
-
-    // Sort by volume * change (momentum)
-    return filtered.sort((a, b) => 
-      (b.volume * Math.abs(b.changePercent)) - (a.volume * Math.abs(a.changePercent))
-    ).slice(0, 20); // Return top 20
-  }
-
-  // Get options data (if needed)
-  async getOptionsData(symbol: string, expiration?: string) {
-    // Implementation for options data
-    // This would integrate with Polygon or other options data providers
-    return null;
-  }
-
-  // Private helper methods
-  private calculateFearGreedIndex(quotes: MarketData[]): number {
-    if (quotes.length === 0) return 50;
-
-    const avgChange = quotes.reduce((sum, q) => sum + q.changePercent, 0) / quotes.length;
-    const volatility = Math.sqrt(
-      quotes.reduce((sum, q) => sum + Math.pow(q.changePercent - avgChange, 2), 0) / quotes.length
-    );
-
-    // Simplified calculation
-    let index = 50;
     
-    if (avgChange > 1) index += 20;
-    if (avgChange > 2) index += 10;
-    if (avgChange < -1) index -= 20;
-    if (avgChange < -2) index -= 10;
-    
-    if (volatility > 3) index -= 15;
-    if (volatility < 1) index += 10;
-
-    return Math.max(0, Math.min(100, index));
-  }
-
-  private extractSymbolsFromText(text: string): string[] {
-    const symbols: string[] = [];
-    const upperText = text.toUpperCase();
-    
-    // Check for common symbols
-    SYMBOLS.WATCHLIST.forEach(symbol => {
-      if (upperText.includes(symbol) || 
-          upperText.includes(`$${symbol}`) ||
-          upperText.includes(`${symbol} `)) {
-        symbols.push(symbol);
-      }
-    });
-
-    // Check for indices
-    SYMBOLS.INDICES.forEach(index => {
-      if (upperText.includes(index) || 
-          upperText.includes(`$${index}`)) {
-        symbols.push(index);
-      }
-    });
-
-    return [...new Set(symbols)]; // Remove duplicates
-  }
-
-  private async analyzeSentiment(article: any): Promise<{sentiment: string, score: number}> {
-    const text = (article.title + ' ' + article.description).toLowerCase();
-    
-    const positiveWords = [
-      'gain', 'rise', 'up', 'bull', 'positive', 'strong', 'beat', 'profit',
-      'earnings', 'growth', 'surge', 'rally', 'soar', 'jump', 'increase'
-    ];
-    
-    const negativeWords = [
-      'loss', 'fall', 'down', 'bear', 'negative', 'weak', 'miss', 'decline',
-      'drop', 'plunge', 'crash', 'selloff', 'warn', 'cut', 'reduce', 'delay'
-    ];
-
-    let positiveCount = 0;
-    let negativeCount = 0;
-
-    positiveWords.forEach(word => {
-      const regex = new RegExp(`\\b${word}\\b`, 'g');
-      const matches = text.match(regex);
-      if (matches) positiveCount += matches.length;
-    });
-
-    negativeWords.forEach(word => {
-      const regex = new RegExp(`\\b${word}\\b`, 'g');
-      const matches = text.match(regex);
-      if (matches) negativeCount += matches.length;
-    });
-
-    const total = positiveCount + negativeCount;
-    if (total === 0) return { sentiment: 'neutral', score: 0 };
-
-    const score = (positiveCount - negativeCount) / total;
-    
-    if (score > 0.2) return { sentiment: 'positive', score };
-    if (score < -0.2) return { sentiment: 'negative', score };
-    return { sentiment: 'neutral', score: 0 };
-  }
-
-  private generateMockHistoricalData(
-    symbol: string, 
-    timeframe: string, 
-    limit: number
-  ): HistoricalData[] {
-    const data: HistoricalData[] = [];
-    let basePrice = 100 + Math.random() * 900;
-    
-    for (let i = 0; i < limit; i++) {
-      const date = new Date();
-      
-      switch (timeframe) {
-        case 'minute':
-          date.setMinutes(date.getMinutes() - i);
-          break;
-        case 'hour':
-          date.setHours(date.getHours() - i);
-          break;
-        case 'day':
-          date.setDate(date.getDate() - i);
-          break;
-        default:
-          date.setDate(date.getDate() - i);
-      }
-
-      const change = (Math.random() - 0.5) * 10;
-      basePrice += change;
-      
-      data.push({
-        timestamp: date,
-        open: basePrice - Math.random() * 2,
-        high: basePrice + Math.random() * 3,
-        low: basePrice - Math.random() * 3,
-        close: basePrice,
-        volume: 1000000 + Math.random() * 5000000
-      });
-    }
-
-    return data.reverse();
-  }
-
-  private startCacheCleanup(): void {
-    // Clean memory cache every 5 minutes
-    setInterval(() => {
-      const now = Date.now();
-      this.lastUpdate.forEach((timestamp, symbol) => {
-        if (now - timestamp.getTime() > CACHE_CONFIG.TTL.QUOTE * 1000 * 10) {
-          this.symbolCache.delete(symbol);
-          this.lastUpdate.delete(symbol);
-        }
-      });
-    }, 300000); // 5 minutes
-  }
-
-  // Get all available symbols (from Alpaca or Polygon)
-  async getAllSymbols(assetClass: string = 'us_equity'): Promise<string[]> {
     try {
-      const assets = await this.alpaca.getAssets('active', assetClass);
-      return assets.map((asset: any) => asset.symbol).slice(0, 1000); // Limit to 1000 symbols
+      // Get multiple market indicators
+      const [sp500, nasdaq, dow, vixData] = await Promise.all([
+        this.getRealTimeQuote('SPY'),
+        this.getRealTimeQuote('QQQ'),
+        this.getRealTimeQuote('DIA'),
+        this.getVIXData()
+      ]);
+      
+      const overview: MarketOverview = {
+        fearGreedIndex: await this.calculateFearGreedIndex(),
+        marketStatus: await this.getMarketStatus(),
+        sp500Change: sp500.changePercent,
+        nasdaqChange: nasdaq.changePercent,
+        dowJonesChange: dow.changePercent,
+        vix: vixData.price,
+        putCallRatio: await this.getPutCallRatio()
+      };
+      
+      // Cache for 1 minute
+      await this.redis.setex(cacheKey, 60, JSON.stringify(overview));
+      
+      return overview;
     } catch (error) {
-      console.error('Error fetching all symbols:', error);
-      return SYMBOLS.WATCHLIST;
+      console.error('Error getting market overview:', error);
+      
+      // Return default overview on error
+      return {
+        fearGreedIndex: 50,
+        marketStatus: 'closed',
+        sp500Change: 0,
+        nasdaqChange: 0,
+        dowJonesChange: 0,
+        vix: 20,
+        putCallRatio: 0.8
+      };
     }
   }
 
   // Get sector performance
   async getSectorPerformance(): Promise<Record<string, number>> {
-    const sectors = SYMBOLS.SECTORS;
-    const quotes = await this.getBatchQuotes(sectors);
+    const cacheKey = 'market:sectors';
     
-    const performance: Record<string, number> = {};
-    quotes.forEach(quote => {
-      performance[quote.symbol] = quote.changePercent;
-    });
+    // Check cache first (5 minute cache)
+    const cached = await this.redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+    
+    try {
+      // Use sector ETFs to gauge performance
+      const sectorETFs = {
+        'Technology': 'XLK',
+        'Financials': 'XLF',
+        'Healthcare': 'XLV',
+        'Consumer Discretionary': 'XLY',
+        'Consumer Staples': 'XLP',
+        'Energy': 'XLE',
+        'Industrials': 'XLI',
+        'Materials': 'XLB',
+        'Utilities': 'XLU',
+        'Real Estate': 'XLRE',
+        'Communication Services': 'XLC'
+      };
+      
+      const quotes = await this.getBatchQuotes(Object.values(sectorETFs));
+      
+      const performance: Record<string, number> = {};
+      
+      quotes.forEach(quote => {
+        const sector = Object.entries(sectorETFs).find(([s, etf]) => etf === quote.symbol)?.[0];
+        if (sector) {
+          performance[sector] = quote.changePercent;
+        }
+      });
+      
+      // Cache for 5 minutes
+      await this.redis.setex(cacheKey, 300, JSON.stringify(performance));
+      
+      return performance;
+    } catch (error) {
+      console.error('Error getting sector performance:', error);
+      return {};
+    }
+  }
 
-    return performance;
+  // Get all available symbols
+  async getAllSymbols(): Promise<string[]> {
+    const cacheKey = 'symbols:all';
+    
+    // Check cache first (24 hour cache for symbol list)
+    const cached = await this.redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+    
+    try {
+      // Get symbols from Polygon
+      const symbols = await this.polygon.getAllSymbols();
+      
+      // Filter for common stocks (remove ETFs, etc.)
+      const commonStocks = symbols.filter(s => 
+        !s.includes('.') && 
+        !s.includes('/') &&
+        s.length <= 5
+      ).slice(0, 5000); // Limit to 5000 symbols
+      
+      // Cache for 24 hours
+      await this.redis.setex(cacheKey, 86400, JSON.stringify(commonStocks));
+      
+      return commonStocks;
+    } catch (error) {
+      console.error('Error getting all symbols:', error);
+      
+      // Return default symbols on error
+      return ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'JPM', 'JNJ', 'V'];
+    }
+  }
+
+  // Get options data for a symbol
+  async getOptionsData(symbol: string): Promise<any> {
+    const cacheKey = `options:${symbol}`;
+    
+    // Check cache first (15 minute cache)
+    const cached = await this.redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+    
+    try {
+      const options = await this.polygon.getOptionsChain(symbol);
+      
+      // Cache for 15 minutes
+      await this.redis.setex(cacheKey, 900, JSON.stringify(options));
+      
+      return options;
+    } catch (error) {
+      console.error(`Error getting options data for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  // Get analyst recommendations
+  async getAnalystRecommendations(symbol: string): Promise<any> {
+    try {
+      return await this.alphaVantage.getAnalystRecommendations(symbol);
+    } catch (error) {
+      console.error(`Error getting analyst recommendations for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  // Private helper methods
+  private async analyzeNewsSentiment(article: any): Promise<{sentiment?: string; sentimentScore?: number}> {
+    // Simple keyword-based sentiment analysis
+    // In production, use NLP API like OpenAI or AWS Comprehend
+    
+    const text = `${article.title} ${article.description}`.toLowerCase();
+    
+    const positiveWords = ['bullish', 'gain', 'profit', 'growth', 'positive', 'strong', 'beat', 'upgrade'];
+    const negativeWords = ['bearish', 'loss', 'decline', 'negative', 'weak', 'miss', 'downgrade', 'warning'];
+    
+    let positiveCount = 0;
+    let negativeCount = 0;
+    
+    positiveWords.forEach(word => {
+      if (text.includes(word)) positiveCount++;
+    });
+    
+    negativeWords.forEach(word => {
+      if (text.includes(word)) negativeCount++;
+    });
+    
+    if (positiveCount > negativeCount) {
+      return { sentiment: 'positive', sentimentScore: positiveCount / (positiveCount + negativeCount) };
+    } else if (negativeCount > positiveCount) {
+      return { sentiment: 'negative', sentimentScore: negativeCount / (positiveCount + negativeCount) };
+    } else {
+      return { sentiment: 'neutral', sentimentScore: 0 };
+    }
+  }
+
+  private async getVIXData(): Promise<Quote> {
+    try {
+      return await this.getRealTimeQuote('VIX');
+    } catch (error) {
+      console.warn('Failed to get VIX data, using default');
+      return {
+        symbol: 'VIX',
+        price: 20,
+        change: 0,
+        changePercent: 0,
+        volume: 0,
+        timestamp: new Date()
+      };
+    }
+  }
+
+  private async calculateFearGreedIndex(): Promise<number> {
+    // Simplified calculation
+    // In production, use actual CNN Fear & Greed Index or calculate from market data
+    
+    try {
+      const vix = await this.getVIXData();
+      const sp500 = await this.getRealTimeQuote('SPY');
+      
+      // Simple formula: lower VIX and positive SPY = higher greed
+      let index = 50;
+      
+      if (vix.price < 15) index += 20;
+      if (vix.price > 30) index -= 20;
+      
+      if (sp500.changePercent > 1) index += 15;
+      if (sp500.changePercent < -1) index -= 15;
+      
+      return Math.max(0, Math.min(100, index));
+    } catch (error) {
+      return 50; // Neutral
+    }
+  }
+
+  private async getMarketStatus(): Promise<'open' | 'closed' | 'pre' | 'post'> {
+    const now = new Date();
+    const hour = now.getHours();
+    const day = now.getDay();
+    
+    // Simple market hours check
+    // 9:30 AM - 4:00 PM ET, Monday-Friday
+    const isWeekday = day >= 1 && day <= 5;
+    const isPreMarket = hour >= 4 && hour < 9; // 4 AM - 9 AM ET
+    const isMarketHours = hour >= 9 && hour < 16; // 9 AM - 4 PM ET
+    const isPostMarket = hour >= 16 && hour < 20; // 4 PM - 8 PM ET
+    
+    if (!isWeekday) return 'closed';
+    if (isPreMarket) return 'pre';
+    if (isMarketHours) return 'open';
+    if (isPostMarket) return 'post';
+    
+    return 'closed';
+  }
+
+  private async getPutCallRatio(): Promise<number> {
+    // Simplified calculation
+    // In production, fetch actual put/call ratio data
+    
+    try {
+      const spyPutVolume = await this.getOptionsVolume('SPY', 'put');
+      const spyCallVolume = await this.getOptionsVolume('SPY', 'call');
+      
+      if (spyCallVolume === 0) return 0;
+      
+      return spyPutVolume / spyCallVolume;
+    } catch (error) {
+      return 0.8; // Default ratio
+    }
+  }
+
+  private async getOptionsVolume(symbol: string, optionType: 'call' | 'put'): Promise<number> {
+    try {
+      const options = await this.getOptionsData(symbol);
+      if (!options) return 0;
+      
+      const relevantOptions = options.filter((opt: any) => 
+        opt.type === optionType && 
+        opt.expiration > new Date() &&
+        Math.abs(opt.strike - (await this.getRealTimeQuote(symbol)).price) / (await this.getRealTimeQuote(symbol)).price < 0.1
+      );
+      
+      return relevantOptions.reduce((sum: number, opt: any) => sum + opt.volume, 0);
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  // Stream real-time data (WebSocket)
+  async streamRealTimeData(
+    symbols: string[], 
+    callback: (quote: Quote) => void
+  ): Promise<() => void> {
+    // Connect to Polygon WebSocket
+    return this.polygon.streamQuotes(symbols, callback);
   }
 }

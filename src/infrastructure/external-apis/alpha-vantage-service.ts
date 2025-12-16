@@ -1,64 +1,29 @@
-import axios from 'axios';
-
 export class AlphaVantageService {
-  private apiKey: string;
   private baseUrl = 'https://www.alphavantage.co/query';
+  private apiKey: string;
 
   constructor() {
     this.apiKey = process.env.ALPHA_VANTAGE_API_KEY!;
   }
 
-  async getTimeSeriesDaily(symbol: string) {
-    try {
-      const response = await axios.get(this.baseUrl, {
-        params: {
-          function: 'TIME_SERIES_DAILY',
-          symbol: symbol,
-          apikey: this.apiKey,
-          outputsize: 'compact'
-        }
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching time series:', error);
-      throw error;
-    }
+  async getQuote(symbol: string) {
+    const response = await fetch(
+      `${this.baseUrl}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${this.apiKey}`
+    );
+    return response.json();
   }
 
-  async getRSI(symbol: string, timePeriod = 14) {
-    try {
-      const response = await axios.get(this.baseUrl, {
-        params: {
-          function: 'RSI',
-          symbol: symbol,
-          interval: 'daily',
-          time_period: timePeriod,
-          series_type: 'close',
-          apikey: this.apiKey
-        }
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching RSI:', error);
-      throw error;
-    }
+  async getDailyData(symbol: string, days: number = 100) {
+    const response = await fetch(
+      `${this.baseUrl}?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=compact&apikey=${this.apiKey}`
+    );
+    const data = await response.json();
+    // Parse and return historical data
+    return this.parseHistoricalData(data, days);
   }
 
-  async getMACD(symbol: string) {
-    try {
-      const response = await axios.get(this.baseUrl, {
-        params: {
-          function: 'MACD',
-          symbol: symbol,
-          interval: 'daily',
-          series_type: 'close',
-          apikey: this.apiKey
-        }
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching MACD:', error);
-      throw error;
-    }
+  private parseHistoricalData(data: any, days: number) {
+    // Implementation
+    return [];
   }
 }
