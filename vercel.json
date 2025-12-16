@@ -1,16 +1,31 @@
 {
-  "version": 2,
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
+  "framework": "nextjs",
   "outputDirectory": ".next",
-  "regions": ["sfo1"],
+  "regions": ["iad1"],
   "env": {
     "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key",
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key",
     "ALPACA_API_KEY": "@alpaca_api_key",
-    "ALPACA_API_SECRET": "@alpaca_api_secret",
-    "ALPACA_PAPER": "true",
-    "REDIS_URL": "@redis_url"
+    "ALPACA_SECRET_KEY": "@alpaca_secret_key",
+    "ALPACA_PAPER": "@alpaca_paper",
+    "HUGGINGFACE_API_KEY": "@huggingface_api_key",
+    "NEWSAPI_KEY": "@newsapi_key",
+    "DISCORD_WEBHOOK_URL": "@discord_webhook_url",
+    "REDIS_URL": "@redis_url",
+    "REDIS_PASSWORD": "@redis_password"
+  },
+  "functions": {
+    "app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
   }
 }
