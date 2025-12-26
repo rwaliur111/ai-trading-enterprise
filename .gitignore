@@ -6,3 +6,4 @@ out/
 *.log
 *.ps1
 *backup*
+.vercel
