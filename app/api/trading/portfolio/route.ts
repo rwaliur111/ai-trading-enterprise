@@ -7,12 +7,10 @@ export async function GET(request: NextRequest) {
     const portfolioService = new PortfolioService();
     const portfolio = await portfolioService.getPortfolio();
     
-    // Get current prices for portfolio items
     if (portfolio.positions && portfolio.positions.length > 0) {
       const symbols = portfolio.positions.map((p: any) => p.symbol);
       const quotes = await MarketDataService.getQuotes(symbols);
       
-      // Update positions with current prices
       portfolio.positions = portfolio.positions.map((position: any) => {
         const quote = quotes.find((q: any) => q.symbol === position.symbol);
         return {
@@ -27,7 +25,6 @@ export async function GET(request: NextRequest) {
         };
       });
       
-      // Recalculate totals
       portfolio.total_market_value = portfolio.positions.reduce(
         (sum: number, p: any) => sum + p.market_value, 0
       );

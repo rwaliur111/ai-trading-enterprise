@@ -14,7 +14,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check current price
     const quotes = await MarketDataService.getQuotes([symbol]);
     if (!quotes || quotes.length === 0) {
       return NextResponse.json(
@@ -25,7 +24,6 @@ export async function POST(request: NextRequest) {
 
     const currentPrice = quotes[0].last_price;
     
-    // Execute trade
     const tradingService = new TradingService();
     const order = await tradingService.placeOrder({
       symbol,
