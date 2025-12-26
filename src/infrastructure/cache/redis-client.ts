@@ -1,100 +1,57 @@
-import Redis from 'ioredis'
-
-export class RedisClient {
-  private static instance: Redis
-  private static isConnected = false
-
-  private constructor() {}
-
-// In your redis-client.ts
 import Redis from 'ioredis';
 
-export const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  username: process.env.REDIS_USERNAME || 'default',
-  maxRetriesPerRequest: 3,
-  retryStrategy: (times) => Math.min(times * 50, 2000),
-});
- 
- static getInstance(): Redis {
+export class RedisClient {
+  private static instance: Redis;
+
+  static getInstance(): Redis {
     if (!RedisClient.instance) {
-      const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379'
-      
-      RedisClient.instance = new Redis(redisUrl, {
-        retryStrategy: (times) => {
-          const delay = Math.min(times * 50, 2000)
-          return delay
-        },
-        maxRetriesPerRequest: 3
-      })
+      if (!process.env.REDIS_HOST || !process.env.REDIS_PORT) {
+        console.warn('Redis configuration missing, using mock client');
+        // Return a mock Redis client for development
+        return this.getMockClient();
+      }
+
+      RedisClient.instance = new Redis({
+        host: process.env.REDIS_HOST,
+        port: parseInt(process.env.REDIS_PORT),
+        password: process.env.REDIS_PASSWORD,
+        username: process.env.REDIS_USERNAME || 'default',
+        retryStrategy: (times) => Math.min(times * 50, 2000),
+        maxRetriesPerRequest: 3,
+      });
 
       RedisClient.instance.on('connect', () => {
-        console.log('Redis connected successfully')
-        RedisClient.isConnected = true
-      })
+        console.log('Redis connected successfully');
+      });
 
-      RedisClient.instance.on('error', (error) => {
-        console.error('Redis connection error:', error)
-        RedisClient.isConnected = false
-      })
+      RedisClient.instance.on('error', (err) => {
+        console.error('Redis connection error:', err);
+      });
     }
 
-    return RedisClient.instance
+    return RedisClient.instance;
+  }
+
+  private static getMockClient(): any {
+    const mockData = new Map();
+    return {
+      get: async (key: string) => mockData.get(key),
+      set: async (key: string, value: string) => mockData.set(key, value),
+      setex: async (key: string, seconds: number, value: string) => {
+        mockData.set(key, value);
+        return 'OK';
+      },
+      quit: async () => {},
+    } as any;
   }
 
   static async isReady(): Promise<boolean> {
-    if (!RedisClient.isConnected) {
-      try {
-        await RedisClient.getInstance().ping()
-        RedisClient.isConnected = true
-      } catch (error) {
-        RedisClient.isConnected = false
-      }
-    }
-    return RedisClient.isConnected
-  }
-
-  static async get(key: string): Promise<string | null> {
-    if (!await this.isReady()) return null
-    
     try {
-      return await RedisClient.getInstance().get(key)
-    } catch (error) {
-      console.error('Redis get error:', error)
-      return null
-    }
-  }
-
-  static async set(key: string, value: string, ttl?: number): Promise<void> {
-    if (!await this.isReady()) return
-    
-    try {
-      if (ttl) {
-        await RedisClient.getInstance().setex(key, ttl, value)
-      } else {
-        await RedisClient.getInstance().set(key, value)
-      }
-    } catch (error) {
-      console.error('Redis set error:', error)
-    }
-  }
-
-  static async del(key: string): Promise<void> {
-    if (!await this.isReady()) return
-    
-    try {
-      await RedisClient.getInstance().del(key)
-    } catch (error) {
-      console.error('Redis delete error:', error)
-    }
-  }
-
-  static async disconnect(): Promise<void> {
-    if (RedisClient.instance) {
-      await RedisClient.instance.quit()
-      RedisClient.isConnected = false
+      const client = RedisClient.getInstance();
+      await client.ping();
+      return true;
+    } catch {
+      return false;
     }
   }
 }

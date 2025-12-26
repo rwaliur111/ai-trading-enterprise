@@ -2,26 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MarketDataService } from '@/domains/market-data/services/market-data-service';
 import { PortfolioService } from '@/application/services/portfolio-service';
 
-// Remove the auth import and add this function
-async function checkAuth() {
-  // Simple auth check
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    return { authenticated: true }; // Development mode
-  }
-  return { authenticated: false, error: 'Unauthorized' };
-}
-
 export async function GET(request: NextRequest) {
   try {
-    const authCheck = await checkAuth();
-    if (!authCheck.authenticated) {
-      return NextResponse.json(
-        { error: authCheck.error || 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const portfolioService = new PortfolioService();
     const portfolio = await portfolioService.getPortfolio();
     
@@ -57,10 +39,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       portfolio,
-      timestamp: new Date().toISOString(),
-      message: portfolio.positions && portfolio.positions.length > 0 
-        ? 'Live portfolio data' 
-        : 'Demo portfolio - add mock positions in portfolio-service.ts'
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
     console.error('Error fetching portfolio:', error);

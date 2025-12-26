@@ -1,4 +1,4 @@
-import { AlpacaService } from '@/infrastructure/brokers/alpaca-service';
+import { AlpacaService } from '@/infrastructure/external-apis/alpaca-service';  // Fixed path
 import { RiskManager } from '@/application/services/risk-manager';
 
 export class TradingService {

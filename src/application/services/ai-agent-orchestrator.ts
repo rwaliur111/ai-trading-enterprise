@@ -1,7 +1,7 @@
 import { MarketDataService } from '@/domains/market-data/services/market-data-service';
 import { TradingService } from '@/application/services/trading-service';
 import { RiskManager } from '@/application/services/risk-manager';
-import { AISignalGenerator } from '@/application/services/ai-signal-generator';
+import { AISignalGenerator } from '@/application/services/ai-signal-generator';  // Fixed path
 
 export class AIAgentOrchestrator {
   private tradingService: TradingService;

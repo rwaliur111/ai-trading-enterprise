@@ -2,26 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MarketDataService } from '@/domains/market-data/services/market-data-service';
 import { TradingService } from '@/application/services/trading-service';
 
-// Remove the auth import and add this function
-async function checkAuth() {
-  // Simple auth check - implement proper auth later
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    return { authenticated: true }; // Development mode
-  }
-  return { authenticated: false, error: 'Unauthorized' };
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const authCheck = await checkAuth();
-    if (!authCheck.authenticated) {
-      return NextResponse.json(
-        { error: authCheck.error || 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const body = await request.json();
     const { symbol, quantity, side, type = 'market', timeInForce = 'day' } = body;
 
@@ -43,28 +25,23 @@ export async function POST(request: NextRequest) {
 
     const currentPrice = quotes[0].last_price;
     
-    // Execute trade (mock for now)
+    // Execute trade
     const tradingService = new TradingService();
-    
-    // Mock order response since we're in development
-    const mockOrder = {
-      id: `order_${Date.now()}`,
+    const order = await tradingService.placeOrder({
       symbol,
       quantity: Number(quantity),
       side,
       type,
-      status: 'filled',
-      filled_avg_price: currentPrice,
-      submitted_at: new Date().toISOString(),
-      timestamp: new Date().toISOString()
-    };
+      timeInForce,
+      limitPrice: type === 'limit' ? body.limitPrice : undefined,
+      stopPrice: type === 'stop' ? body.stopPrice : undefined
+    });
 
     return NextResponse.json({
       success: true,
-      order: mockOrder,
+      order,
       executedAt: new Date().toISOString(),
-      estimatedValue: currentPrice * Number(quantity),
-      message: 'Trade executed (demo mode)'
+      estimatedValue: currentPrice * Number(quantity)
     });
   } catch (error) {
     console.error('Error placing order:', error);
@@ -81,41 +58,13 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const authCheck = await checkAuth();
-    if (!authCheck.authenticated) {
-      return NextResponse.json(
-        { error: authCheck.error || 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // Mock orders for development
-    const mockOrders = [
-      {
-        id: 'order_1',
-        symbol: 'AAPL',
-        side: 'buy',
-        qty: 10,
-        status: 'filled',
-        filled_avg_price: 175.50,
-        submitted_at: new Date(Date.now() - 86400000).toISOString()
-      },
-      {
-        id: 'order_2',
-        symbol: 'MSFT',
-        side: 'sell',
-        qty: 5,
-        status: 'filled',
-        filled_avg_price: 420.75,
-        submitted_at: new Date(Date.now() - 172800000).toISOString()
-      }
-    ];
+    const tradingService = new TradingService();
+    const orders = await tradingService.getOrders();
 
     return NextResponse.json({
       success: true,
-      orders: mockOrders,
-      timestamp: new Date().toISOString(),
-      message: 'Demo mode - showing mock orders'
+      orders,
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
     console.error('Error fetching orders:', error);
