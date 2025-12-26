@@ -1,199 +1,99 @@
-export class HuggingFaceService {
-  private apiKey: string;
-  private baseUrl = 'https://api-inference.huggingface.co/models';
+import axios from 'axios';
+import { RedisClient } from '@/infrastructure/redis/redis-client';
+import { AlpacaService } from '@/infrastructure/brokers/alpaca-service';
 
-  constructor() {
-    this.apiKey = process.env.HUGGINGFACE_API_KEY!;
-  }
+const redis = RedisClient.getInstance();
 
-  // Sentiment analysis for news/articles
-  async analyzeSentiment(text: string): Promise<{
-    sentiment: 'positive' | 'negative' | 'neutral';
-    confidence: number;
-    scores: { positive: number; negative: number; neutral: number };
-  }> {
-    try {
-      const response = await fetch(
-        `${this.baseUrl}/distilbert-base-uncased-finetuned-sst-2-english`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ inputs: text }),
-        }
-      );
-
-      const data = await response.json();
-      
-      if (Array.isArray(data) && data.length > 0) {
-        const results = data[0];
-        const positiveScore = results.find((r: any) => r.label === 'POSITIVE')?.score || 0;
-        const negativeScore = results.find((r: any) => r.label === 'NEGATIVE')?.score || 0;
-        
-        const sentiment = positiveScore > negativeScore ? 'positive' : 'negative';
-        const confidence = Math.max(positiveScore, negativeScore);
-        
-        return {
-          sentiment,
-          confidence,
-          scores: {
-            positive: positiveScore,
-            negative: negativeScore,
-            neutral: 1 - (positiveScore + negativeScore)
-          }
-        };
-      }
-      
-      return {
-        sentiment: 'neutral',
-        confidence: 0.5,
-        scores: { positive: 0.33, negative: 0.33, neutral: 0.34 }
-      };
-    } catch (error) {
-      console.error('HuggingFace sentiment analysis failed:', error);
-      return {
-        sentiment: 'neutral',
-        confidence: 0.5,
-        scores: { positive: 0.33, negative: 0.33, neutral: 0.34 }
-      };
+export async function fetchRealTimeQuotes(symbols: string[]): Promise<any[]> {
+  try {
+    const cacheKey = `quotes:${symbols.join(',')}`;
+    const cached = await redis.get(cacheKey);
+    
+    if (cached) {
+      return JSON.parse(cached);
     }
+
+    const alpaca = new AlpacaService();
+    const quotes = await alpaca.getQuotes(symbols);
+    
+    await redis.setex(cacheKey, 30, JSON.stringify(quotes));
+    
+    return quotes;
+  } catch (error) {
+    console.error('Error fetching real-time quotes:', error);
+    throw new Error('Failed to fetch market data');
   }
+}
 
-  // Financial sentiment analysis (specialized model)
-  async analyzeFinancialSentiment(text: string): Promise<{
-    sentiment: 'bullish' | 'bearish' | 'neutral';
-    confidence: number;
-  }> {
-    try {
-      const response = await fetch(
-        `${this.baseUrl}/mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ inputs: text }),
-        }
-      );
-
-      const data = await response.json();
-      
-      if (Array.isArray(data) && data.length > 0) {
-        const results = data[0];
-        const bullishScore = results.find((r: any) => r.label === 'positive')?.score || 0;
-        const bearishScore = results.find((r: any) => r.label === 'negative')?.score || 0;
-        const neutralScore = results.find((r: any) => r.label === 'neutral')?.score || 0;
-        
-        const maxScore = Math.max(bullishScore, bearishScore, neutralScore);
-        let sentiment: 'bullish' | 'bearish' | 'neutral' = 'neutral';
-        
-        if (maxScore === bullishScore) sentiment = 'bullish';
-        else if (maxScore === bearishScore) sentiment = 'bearish';
-        
-        return {
-          sentiment,
-          confidence: maxScore
-        };
-      }
-      
-      return {
-        sentiment: 'neutral',
-        confidence: 0.5
-      };
-    } catch (error) {
-      console.error('HuggingFace financial sentiment analysis failed:', error);
-      return {
-        sentiment: 'neutral',
-        confidence: 0.5
-      };
+export async function getHistoricalData(symbol: string, timeframe: string = '1D'): Promise<any> {
+  try {
+    const cacheKey = `historical:${symbol}:${timeframe}`;
+    const cached = await redis.get(cacheKey);
+    
+    if (cached) {
+      return JSON.parse(cached);
     }
+
+    const alpaca = new AlpacaService();
+    const data = await alpaca.getHistoricalData(symbol, timeframe);
+    
+    await redis.setex(cacheKey, 300, JSON.stringify(data));
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching historical data:', error);
+    throw new Error('Failed to fetch historical data');
   }
+}
 
-  // Zero-shot classification for news categorization
-  async categorizeNews(text: string, categories: string[]): Promise<{
-    category: string;
-    confidence: number;
-    allScores: Record<string, number>;
-  }> {
-    try {
-      const response = await fetch(
-        `${this.baseUrl}/facebook/bart-large-mnli`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            inputs: text,
-            parameters: { candidate_labels: categories }
-          }),
-        }
-      );
-
-      const data = await response.json();
-      
-      if (data.labels && data.scores) {
-        const maxScoreIndex = data.scores.indexOf(Math.max(...data.scores));
-        const allScores: Record<string, number> = {};
-        
-        data.labels.forEach((label: string, index: number) => {
-          allScores[label] = data.scores[index];
-        });
-        
-        return {
-          category: data.labels[maxScoreIndex],
-          confidence: data.scores[maxScoreIndex],
-          allScores
-        };
-      }
-      
-      return {
-        category: categories[0],
-        confidence: 0.5,
-        allScores: {}
-      };
-    } catch (error) {
-      console.error('HuggingFace categorization failed:', error);
-      return {
-        category: categories[0],
-        confidence: 0.5,
-        allScores: {}
-      };
+export async function getMarketNews(symbol?: string): Promise<any[]> {
+  try {
+    const cacheKey = `news:${symbol || 'general'}`;
+    const cached = await redis.get(cacheKey);
+    
+    if (cached) {
+      return JSON.parse(cached);
     }
-  }
 
-  // Summarize long articles/news
-  async summarizeText(text: string, maxLength: number = 150): Promise<string> {
-    try {
-      const response = await fetch(
-        `${this.baseUrl}/facebook/bart-large-cnn`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            inputs: text,
-            parameters: { max_length: maxLength, min_length: 30 }
-          }),
-        }
-      );
-
-      const data = await response.json();
-      
-      if (data[0]?.summary_text) {
-        return data[0].summary_text;
+    const response = await axios.get('https://api.polygon.io/v2/reference/news', {
+      params: {
+        apiKey: process.env.POLYGON_API_KEY,
+        ticker: symbol,
+        limit: 10
       }
-      
-      return text.slice(0, maxLength) + '...';
+    });
+    
+    const news = response.data.results || [];
+    await redis.setex(cacheKey, 600, JSON.stringify(news));
+    
+    return news;
+  } catch (error) {
+    console.error('Error fetching market news:', error);
+    return [];
+  }
+}
+
+// ADD THIS CLASS - FIXES THE IMPORT ERRORS
+export class MarketDataService {
+  static async getQuotes(symbols: string[]) {
+    return await fetchRealTimeQuotes(symbols);
+  }
+  
+  static async getHistorical(symbol: string, timeframe: string = '1D') {
+    return await getHistoricalData(symbol, timeframe);
+  }
+  
+  static async getNews(symbol?: string) {
+    return await getMarketNews(symbol);
+  }
+  
+  static async getMarketStatus() {
+    try {
+      const alpaca = new AlpacaService();
+      return await alpaca.getMarketStatus();
     } catch (error) {
-      console.error('HuggingFace summarization failed:', error);
-      return text.slice(0, maxLength) + '...';
+      console.error('Error fetching market status:', error);
+      return { is_open: false };
     }
   }
 }
