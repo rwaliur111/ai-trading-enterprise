@@ -105,7 +105,7 @@ export class MarketDataService {
       
       return {
         quotes,
-        news: news.slice(0, 5), // Return only top 5 news items
+        news: news.slice(0, 5),
         timestamp: new Date().toISOString()
       };
     } catch (error) {
@@ -119,7 +119,6 @@ export class MarketDataService {
       const popularSymbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'NFLX'];
       const quotes = await this.getQuotes(popularSymbols);
       
-      // Simple opportunity scanning logic
       const opportunities = quotes.map(quote => {
         const volatility = Math.abs(quote.change || 0);
         const volume = quote.volume || 0;
