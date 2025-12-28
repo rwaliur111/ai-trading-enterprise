@@ -1,41 +1,20 @@
-import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
+// Simple auth placeholder - implement proper auth later
 export async function auth() {
   try {
-    const cookieStore = cookies()
-    
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value
-          },
-        },
-      }
-    )
-
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    if (!session) {
-      return null
-    }
-
-    // Get user profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .single()
-
+    // For development, return a mock session
+    // Replace this with real Supabase auth when ready
     return {
-      ...session,
       user: {
-        ...session.user,
-        profile
-      }
+        id: 'dev-user-123',
+        email: 'developer@example.com',
+        profile: {
+          id: 'dev-user-123',
+          created_at: new Date().toISOString()
+        }
+      },
+      access_token: 'dev-token'
     }
   } catch (error) {
     console.error('Auth error:', error)
@@ -51,20 +30,4 @@ export async function requireAuth() {
   }
   
   return session
-}
-
-export function getSupabaseClient() {
-  const cookieStore = cookies()
-  
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-      },
-    }
-  )
 }
